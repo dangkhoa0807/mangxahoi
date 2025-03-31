@@ -1,0 +1,661 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                        String                     @id @default(auto()) @map("_id") @db.ObjectId
+  email                     String                     @unique
+  password                  String?
+  createdAt                 DateTime                   @default(now())
+  posts                     Post[]
+  comments                  Comment[]
+  likes                     Like[]
+  followers                 Follower[]                 @relation("UserFollowers")
+  following                 Follower[]                 @relation("UserFollowing")
+  friends                   Friend[]                   @relation("UserFriends")
+  friendOf                  Friend[]                   @relation("UserFriendsFriend")
+  groups                    Group[]
+  groupMembers              GroupMember[]
+  notifications             Notification[]
+  sentRequests              FriendRequest[]            @relation("Sender") // Các yêu cầu kết bạn đã gửi
+  receivedRequests          FriendRequest[]            @relation("Receiver") // Các yêu cầu kết bạn đã nhận
+  actionTickets             ActionTicket[]
+  profile                   Profile?
+  Reaction                  Reaction[]
+  HiddenPost                HiddenPost[]
+  SavedPost                 SavedPost[]
+  sentNotifications         Notification[]             @relation("NotificationSender")
+  CommentReaction           CommentReaction[]
+  PostReport                PostReport[]
+  CommentReport             CommentReport[]
+  conversations             ConversationParticipant[] // Tham gia các cuộc trò chuyện
+  messages                  Message[]
+  privacySettings           PrivacySettings?
+  notificationSettings      NotificationSettings?
+  blockedUsers              Block[]                    @relation("UserBlocker")
+  blockedBy                 Block[]                    @relation("UserBlocked")
+  roles                     UserRole[]                 @relation("UserRoles")
+  bannedUsers               BannedUser[]
+  bannedByAdmin             BannedUser[]               @relation("BannedByAdmin")
+  GroupJoinRequest          GroupJoinRequest[]
+  groupBans                 GroupBannedMember[]
+  groupBansAdmin            GroupBannedMember[]        @relation("GroupBanAdmin")
+  UserDevice                UserDevice[]
+  UnreadMessageCounter      UnreadMessageCounter[]
+  UnreadNotificationCounter UnreadNotificationCounter?
+  StickerUser               StickerUser[]
+}
+
+model Profile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  name      String
+  gender    String
+  birthday  DateTime
+  avatarUrl String?
+  bannerUrl String?
+  bio       String?
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Post {
+  id         String     @id @default(auto()) @map("_id") @db.ObjectId
+  title      String?
+  content    String?
+  slug       String     @unique
+  visibility Visibility @default(PUBLIC)
+  status     PostStatus @default(ACTIVE)
+  userId     String     @db.ObjectId
+  createdAt  DateTime   @default(now()) @map("createdAt")
+  user       User       @relation(fields: [userId], references: [id])
+  images     Image[]
+
+  likes    Like[]
+  comments Comment[]
+  shares   Post[]    @relation("PostShares")
+
+  // dánh dấu group
+  groupId String? @db.ObjectId
+  group   Group?  @relation(fields: [groupId], references: [id])
+
+  // bài viết gốc ( để làm chia sẽ )
+  originalPostId       String?                @db.ObjectId
+  originalPost         Post?                  @relation("PostShares", fields: [originalPostId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reactions            Reaction[]
+  hiddenPost           HiddenPost[]
+  savedPost            SavedPost[]
+  reports              PostReport[]
+  hashTags             PostHashtag[]          @relation("PostHashtags")
+  allowComments        Boolean                @default(true)
+  PostInteractionScore PostInteractionScore[]
+
+  @@index([userId, createdAt])
+  @@index([status, visibility])
+  @@index([userId, status, createdAt])
+  @@index([groupId])
+}
+
+model Hashtag {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  postHashtags PostHashtag[] @relation("PostHashtags") // Liên kết đến bảng trung gian
+}
+
+model PostHashtag {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  postId    String  @db.ObjectId
+  hashtagId String  @db.ObjectId
+  post      Post    @relation("PostHashtags", fields: [postId], references: [id], onDelete: Cascade)
+  hashtag   Hashtag @relation("PostHashtags", fields: [hashtagId], references: [id], onDelete: Cascade)
+}
+
+model HiddenPost {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  postId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model SavedPost {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  postId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Reaction {
+  id        String       @id @default(auto()) @map("_id") @db.ObjectId
+  postId    String       @db.ObjectId
+  userId    String       @db.ObjectId
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId], name: "userId_postId")
+}
+
+model Image {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  url       String
+  postId    String   @db.ObjectId
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model PostReport {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  postId      String       @db.ObjectId
+  userId      String       @db.ObjectId
+  reason      String
+  description String?
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+}
+
+model CommentReport {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  commentId   String   @db.ObjectId
+  userId      String   @db.ObjectId
+  reason      String
+  description String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+model Comment {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  content   String
+  status    CommentStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("createdAt")
+  userId    String        @db.ObjectId
+  postId    String        @db.ObjectId
+  stickerId String?       @db.ObjectId
+  parentId  String?       @db.ObjectId
+  image     String? // URL của ảnh
+
+  user      User              @relation(fields: [userId], references: [id])
+  post      Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent    Comment?          @relation("CommentReply", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies   Comment[]         @relation("CommentReply")
+  reactions CommentReaction[]
+  reports   CommentReport[]
+  sticker   Sticker?          @relation(fields: [stickerId], references: [id])
+
+  @@index([postId, createdAt])
+}
+
+model CommentReaction {
+  id        String       @id @default(auto()) @map("_id") @db.ObjectId
+  commentId String       @db.ObjectId
+  userId    String       @db.ObjectId
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @db.ObjectId
+  post   Post   @relation(fields: [postId], references: [id])
+  postId String @db.ObjectId
+}
+
+model Follower {
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  follower    User   @relation("UserFollowers", fields: [followerId], references: [id])
+  followerId  String @db.ObjectId
+  following   User   @relation("UserFollowing", fields: [followingId], references: [id])
+  followingId String @db.ObjectId
+
+  @@index([followerId, followingId])
+  @@index([followingId, followerId])
+}
+
+model Friend {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  user      User     @relation("UserFriends", fields: [userId], references: [id])
+  userId    String   @db.ObjectId
+  friend    User     @relation("UserFriendsFriend", fields: [friendId], references: [id])
+  friendId  String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  @@index([userId, friendId])
+  @@index([friendId, userId])
+  @@index([createdAt])
+}
+
+model FriendRequest {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  sender      User      @relation("Sender", fields: [senderId], references: [id])
+  senderId    String    @db.ObjectId
+  receiver    User      @relation("Receiver", fields: [receiverId], references: [id])
+  receiverId  String    @db.ObjectId
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@index([senderId, receiverId, status])
+  @@index([receiverId, senderId, status])
+}
+
+model Group {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  iconUrl     String?
+  bannerUrl   String?
+  createdAt   DateTime    @default(now())
+  ownerId     String      @db.ObjectId
+  status      GroupStatus @default(ACTIVE)
+
+  privacy      Privacy
+  members      GroupMember[]
+  Post         Post[]
+  owner        User                @relation(fields: [ownerId], references: [id])
+  joinRequests GroupJoinRequest[]
+  bannedUsers  GroupBannedMember[]
+}
+
+enum GroupStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+model GroupMember {
+  id       String    @id @default(auto()) @map("_id") @db.ObjectId
+  group    Group     @relation(fields: [groupId], references: [id])
+  groupId  String    @db.ObjectId
+  user     User      @relation(fields: [userId], references: [id])
+  userId   String    @db.ObjectId
+  role     GroupRole // 'admin', 'member'
+  joinedAt DateTime  @default(now())
+}
+
+model Notification {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  type        String // 'like', 'comment', 'follow', 'friend_request', 'group_join_accepted', 'group_join_rejected', 'new_post'
+  message     String?
+  read        Boolean  @default(false)
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String   @db.ObjectId
+  senderId    String   @db.ObjectId
+  sender      User     @relation("NotificationSender", fields: [senderId], references: [id])
+  redirectUrl String
+  createdAt   DateTime @default(now())
+}
+
+model VerificationCode {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  code      String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+}
+
+model ActionTicket {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?  @db.ObjectId
+  ticket    String
+  action    String // "reset_password", "change_email", "create_profile", "verify_email"
+  expiresAt DateTime
+}
+
+model RefreshToken {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String     @db.ObjectId
+  deviceId  String     @db.ObjectId
+  token     String
+  expiredAt DateTime
+  device    UserDevice @relation(fields: [deviceId], references: [id])
+}
+
+model Conversation {
+  id                   String                    @id @default(auto()) @map("_id") @db.ObjectId
+  isGroup              Boolean                   @default(false) // Xác định loại cuộc trò chuyện (nhóm hoặc cá nhân)
+  participants         ConversationParticipant[] // Các thành viên của cuộc trò chuyện
+  messages             Message[] // Các tin nhắn trong cuộc trò chuyện
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  UnreadMessageCounter UnreadMessageCounter[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String       @db.ObjectId
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String       @db.ObjectId
+  joinedAt       DateTime     @default(now())
+}
+
+model Message {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  content        String
+  isRevoked      Boolean  @default(false)
+  senderId       String   @db.ObjectId
+  conversationId String   @db.ObjectId
+  stickerId      String?  @db.ObjectId
+  isRead         Boolean  @default(false)
+  sentAt         DateTime @default(now()) @map("sentAt")
+
+  sticker      Sticker?     @relation(fields: [stickerId], references: [id])
+  sender       User         @relation(fields: [senderId], references: [id])
+  files        File[]       @relation("MessageFiles")
+  conversation Conversation @relation(fields: [conversationId], references: [id]) // Liên kết với cuộc trò chuyện
+
+  @@index([conversationId, sentAt])
+}
+
+model File {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  url       String
+  type      String
+  name      String
+  size      Int
+  messageId String  @db.ObjectId
+  message   Message @relation("MessageFiles", fields: [messageId], references: [id])
+}
+
+model Block {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  blocker   User     @relation("UserBlocker", fields: [blockerId], references: [id])
+  blockerId String   @db.ObjectId
+  blocked   User     @relation("UserBlocked", fields: [blockedId], references: [id])
+  blockedId String   @db.ObjectId
+  createdAt DateTime @default(now())
+}
+
+model UserDevice {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String         @db.ObjectId
+  deviceId      String // Unique device identifier
+  deviceName    String // Device name/type
+  lastIp        String?
+  lastLoginAt   DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+  refreshTokens RefreshToken[]
+  user          User           @relation(fields: [userId], references: [id])
+
+  @@unique([userId, deviceId])
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  FRIENDS
+  GROUP
+}
+
+enum GroupRole {
+  ADMIN
+  MEMBER
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+
+enum Privacy {
+  PUBLIC
+  PRIVATE
+}
+
+// Model quản lý quyền riêng tư của người dùng
+model PrivacySettings {
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String            @unique @db.ObjectId
+  user             User              @relation(fields: [userId], references: [id])
+  allowFollow      Boolean           @default(true) // Cho phép người khác theo di
+  allowMessage     MessagePrivacy    @default(EVERYONE) // Ai có thể nhắn tin
+  showOnlineStatus Boolean           @default(true) // Hiển thị trạng thái online
+  showLastSeen     Boolean           @default(true) // Hiển thị lần cuối online
+  showProfileTo    ProfileVisibility @default(EVERYONE) // Ai có thể xem trang cá nhân
+  showFollowing    Boolean           @default(true) // Add this new field
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+// Model quản lý cài đặt thông báo
+model NotificationSettings {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String   @unique @db.ObjectId
+  user               User     @relation(fields: [userId], references: [id])
+  postComments       Boolean  @default(true) // Thông báo bình luận bài viết
+  postLikes          Boolean  @default(true) // Thông báo like bài viết
+  commentLikes       Boolean  @default(true) // Thông báo like bình luận
+  newFollower        Boolean  @default(true) // Thông báo người theo dõi mới
+  friendRequests     Boolean  @default(true) // Thông báo yêu cầu kết bạn
+  groupInvites       Boolean  @default(true) // Thông báo mời vào nhóm
+  directMessages     Boolean  @default(true) // Thông báo tin nhắn mới
+  emailNotifications Boolean  @default(true) // Nhận email thông báo
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+enum MessagePrivacy {
+  EVERYONE
+  FRIENDS
+  NOBODY
+}
+
+enum ProfileVisibility {
+  EVERYONE
+  FRIENDS
+  PRIVATE
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+model UserRole {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  role      Role     @default(USER)
+  user      User     @relation("UserRoles", fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BannedUser {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String         @db.ObjectId
+  bannedBy    String         @db.ObjectId
+  reason      String
+  restriction BanRestriction
+  startAt     DateTime       @default(now())
+  endAt       DateTime? // null means permanent ban
+
+  user  User @relation(fields: [userId], references: [id])
+  admin User @relation("BannedByAdmin", fields: [bannedBy], references: [id])
+}
+
+enum BanRestriction {
+  FULL_BAN // Khoá toàn bộ tài khoản
+  COMMENT_BAN // Chỉ khoá bình luận  
+  POST_BAN // Chỉ khoá đăng bài
+  REACTION_BAN // Chỉ khoá tương tác (like, react)
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+enum CommentStatus {
+  ACTIVE
+  HIDDEN // Xóa bởi admin
+  DELETED // Xóa bởi người dùng
+}
+
+enum PostStatus {
+  ACTIVE
+  HIDDEN // Xóa bởi admin
+  DELETED // Xóa bởi người dùng
+}
+
+model GroupJoinRequest {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  group     Group         @relation(fields: [groupId], references: [id])
+  groupId   String        @db.ObjectId
+  user      User          @relation(fields: [userId], references: [id])
+  userId    String        @db.ObjectId
+  status    RequestStatus @default(PENDING)
+  message   String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([groupId, status])
+  @@index([userId, status])
+}
+
+model GroupBannedMember {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  groupId   String    @db.ObjectId
+  userId    String    @db.ObjectId
+  bannedBy  String    @db.ObjectId
+  reason    String
+  createdAt DateTime  @default(now())
+  endAt     DateTime?
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  admin User  @relation("GroupBanAdmin", fields: [bannedBy], references: [id])
+
+  @@index([groupId])
+  @@index([userId])
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model PostInteractionScore {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  postId        String   @db.ObjectId
+  post          Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  score         Int      @default(0) // Tổng điểm tương tác
+  weekStartDate DateTime // Ngày bắt đầu tuần
+  weekEndDate   DateTime // Ngày kết thúc tuần
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([postId, weekStartDate, weekEndDate])
+  @@index([postId])
+  @@index([score])
+  @@index([weekStartDate, weekEndDate])
+}
+
+// Đếm tin nhắn mới
+model UnreadMessageCounter {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @db.ObjectId
+  conversationId  String   @db.ObjectId
+  count           Int      @default(0)
+  lastMessageTime DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+}
+
+// Đếm thông báo mới
+model UnreadNotificationCounter {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model StickerPack {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  coverUrl    String
+  status      StickerPackStatus @default(ACTIVE) // ACTIVE, INACTIVE, DELETED
+  createdAt   DateTime          @default(now())
+
+  stickers    Sticker[]
+  StickerUser StickerUser[]
+}
+
+model Sticker {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  packId    String        @db.ObjectId
+  keywords  String[]
+  url       String // URL to the sticker image/animation
+  status    StickerStatus @default(ACTIVE) // ACTIVE, INACTIVE, DELETED
+  createdAt DateTime      @default(now())
+
+  messages Message[] // Add this relation
+  comments Comment[]
+  pack     StickerPack @relation(fields: [packId], references: [id])
+}
+
+model StickerUser {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  packId    String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  user User        @relation(fields: [userId], references: [id])
+  pack StickerPack @relation(fields: [packId], references: [id])
+
+  @@unique([userId, packId])
+}
+
+enum StickerPackStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum StickerStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}

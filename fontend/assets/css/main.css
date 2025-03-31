@@ -1,0 +1,33 @@
+@layer tailwind-base, primeVue, tailwind-utilities;
+
+@layer tailwind-base {
+  @tailwind base;
+}
+
+@layer tailwind-utilities {
+  @tailwind components;
+  @tailwind utilities;
+}
+
+/* * {
+  font-family: "Noto Color Emoji", sans-serif;
+} */
+
+.ql-toolbar.ql-snow {
+  border-top-right-radius: 6px;
+  border-top-left-radius: 6px;
+}
+
+.ql-toolbar.ql-snow + .ql-container.ql-snow {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+* {
+  font-family: "Signika", "Noto Color Emoji", sans-serif;
+  font-optical-sizing: auto;
+}
+
+#sidebar .router-link-active {
+  background-color: #e5e7eb;
+}
